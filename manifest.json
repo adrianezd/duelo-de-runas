@@ -1,0 +1,11 @@
+{
+  "name": "Duelo de Runas",
+  "short_name": "Duelo Runas",
+  "description": "Torres de fusión contra un rival: invoca, fusiona y aguanta.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#120f1f",
+  "theme_color": "#120f1f",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Duelo de Runas: torres de fusión contra un rival</title>
+<meta name="description" content="Juego de defensa de torres de fusión: invoca runas al azar, fusiona las iguales, mejora tu mazo y aguanta más que tu rival. Duelo, supervivencia, jefes, héroes y cofres. Gratis en el navegador y el móvil.">
+<link rel="canonical" href="https://adrianezd.github.io/duelo-de-runas/">
+<meta name="theme-color" content="#120f1f">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<meta property="og:title" content="Duelo de Runas">
+<meta property="og:description" content="Invoca, fusiona y aguanta más que tu rival. Torres de fusión gratis en el navegador.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://adrianezd.github.io/duelo-de-runas/">
+<meta property="og:locale" content="es_ES">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<main id="menu"></main>
+
+<section id="juego" hidden>
+  <header id="g-rival">
+    <div id="r-heroe"></div>
+    <div class="who"><b id="r-nombre"></b><small id="r-copas"></small></div>
+    <div class="muro rival"><i id="r-muro"></i><span id="r-muro-t"></span></div>
+    <div class="carga" title="Héroe del rival"><i id="r-carga"></i></div>
+    <button id="b-pausa" aria-label="Pausa">II</button>
+  </header>
+  <div id="g-lienzo"><canvas id="cv"></canvas></div>
+  <footer id="g-yo">
+    <div id="g-info"></div>
+    <div class="muro yo"><i id="y-muro"></i><span id="y-muro-t"></span></div>
+    <div class="acciones">
+      <button id="b-heroe" aria-label="Héroe"></button>
+      <button id="b-invocar"><b>Invocar</b><span><i class="gota"></i><span id="coste">10</span></span></button>
+      <div class="mana"><i class="gota"></i><b id="mana">100</b></div>
+    </div>
+    <div id="g-mazo"></div>
+  </footer>
+</section>
+
+<div id="modal" hidden></div>
+
+<script src="js/data.js?v=1"></script>
+<script src="js/game.js?v=1"></script>
+<script src="js/ui.js?v=1"></script>
+</body>
+</html>
