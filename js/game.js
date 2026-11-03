@@ -1,26 +1,69 @@
 // Duelo de Runas: motor de la partida, rival y dibujo en canvas.
-const W = 360, H = 574, CELL = 56, OX = 4, GX = 36, GY = 36;
+const W = 360, H = 574, OX = 4;
 const MID_TOP = 262, ME_Y = 318; // el rival se dibuja hacia arriba desde MID_TOP; tú, hacia abajo desde ME_Y
-const RONDA_DUR = 40, MURO_MAX = 20, RANGO_MAX = 7;
-const PATH = [[18, 236], [18, 18], [334, 18], [334, 236]];
-const SEG = [];
-let PATH_LEN = 0;
-for (let i = 0; i < PATH.length - 1; i++) {
-  const [x1, y1] = PATH[i], [x2, y2] = PATH[i + 1], l = Math.hypot(x2 - x1, y2 - y1);
-  SEG.push({ x1, y1, x2, y2, l, s: PATH_LEN });
-  PATH_LEN += l;
+const RONDA_DUR = 40, MURO_MAX = 20, RANGO_MAX = 7, LARGO_BASE = 752;
+let GX = 36, GY = 36, CW = 56, CH = 56, PATH = [], SEG = [], PATH_LEN = 0, GEO = null;
+
+// Encaja el tablero de Reino: su cuadrícula ocupa 280 px de ancho y el camino sale de su `way`.
+function ponerTablero(id) {
+  const T = TABLEROS[id] || null;
+  let pts;
+  if (T) {
+    // la escala sale de lo que quepa: la cuadrícula hasta 260 px y el camino (sin entrada ni salida) hasta 320
+    const dentro = T.way.slice(1, -1), wx1 = Math.min(...dentro.map((p) => p[0])), wx2 = Math.max(...dentro.map((p) => p[0]));
+    const s = Math.min(260 / (T.g[2] - T.g[0]), 320 / (wx2 - wx1));
+    GX = 176 - ((wx1 + wx2) / 2 - T.g[0]) * s;
+    CW = (T.g[2] - T.g[0]) * s / 5;
+    const minY = Math.min(...T.way.map((p) => p[1]));
+    GY = 16 - (minY - T.g[1]) * s;
+    CH = (T.g[3] - T.g[1]) * s / 3;
+    pts = T.way.map(([x, y]) => [Math.max(8, Math.min(344, GX + (x - T.g[0]) * s)), Math.max(8, Math.min(240, GY + (y - T.g[1]) * s))]);
+    GEO = { id, T, s };
+  } else {
+    GX = 36; GY = 36; CW = 56; CH = 56;
+    pts = [[18, 236], [18, 18], [334, 18], [334, 236]];
+    GEO = null;
+  }
+  PATH = pts; SEG = []; PATH_LEN = 0;
+  for (let i = 0; i < PATH.length - 1; i++) {
+    const [x1, y1] = PATH[i], [x2, y2] = PATH[i + 1], l = Math.hypot(x2 - x1, y2 - y1);
+    if (!l) continue;
+    SEG.push({ x1, y1, x2, y2, l, s: PATH_LEN });
+    PATH_LEN += l;
+  }
 }
+ponerTablero(null);
 
 function pathPos(s) {
   s = Math.max(0, Math.min(PATH_LEN, s));
   for (const g of SEG) if (s <= g.s + g.l) {
     const k = (s - g.s) / g.l;
-    return { x: g.x1 + (g.x2 - g.x1) * k, y: g.y1 + (g.y2 - g.y1) * k };
+    return { x: g.x1 + (g.x2 - g.x1) * k, y: g.y1 + (g.y2 - g.y1) * k, dx: g.x2 - g.x1 };
   }
-  return { x: PATH[3][0], y: PATH[3][1] };
+  const p = PATH[PATH.length - 1];
+  return { x: p[0], y: p[1], dx: 0 };
 }
 function scr(b, x, y) { return b.flip ? [OX + x, MID_TOP - y] : [OX + x, ME_Y + y]; }
-function cellXY(i) { const c = i % 5, r = (i / 5) | 0; return { x: GX + c * CELL + CELL / 2, y: GY + r * CELL + CELL / 2 }; }
+function cellXY(i) { const c = i % 5, r = (i / 5) | 0; return { x: GX + c * CW + CW / 2, y: GY + r * CH + CH / 2 }; }
+
+// Dibujos
+const IMG = {};
+function img(p) {
+  let im = IMG[p];
+  if (!im) { im = IMG[p] = new Image(); im.src = 'assets/' + p + '.webp'; }
+  return im;
+}
+const listo = (im) => im && im.complete && im.naturalWidth > 0;
+function precargar() {
+  if (GEO) img('boards/' + GEO.id);
+  for (const b of M.boards) {
+    for (const t of b.deck) { const R = RUNAS[t]; img('units/board/' + R.img + '-idle'); img('units/board/' + R.img + '-attack'); if (R.tiro) img('fx/' + R.tiro); if (R.imp) img('fx/' + R.imp); }
+    img('fx/' + HEROES[b.hero.id].fx);
+  }
+  for (const k in MONSTRUOS) img('enemies/' + MONSTRUOS[k].img);
+  for (const k in JEFES) img('enemies/' + JEFES[k].img);
+  ['muerte-puf', 'fusion', 'invocar', 'estado-aturdido', 'estado-helado', 'estado-veneno', 'marea'].forEach((f) => img('fx/' + f));
+}
 function mulberry32(a) {
   return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
@@ -45,13 +88,15 @@ function empezarPartida(opts) {
     modo: opts.modo, t: 0, ronda: 1, fase: 'olas', faseT: 0, spawnT: 2, rng: mulberry32(opts.seed || (Date.now() & 0xffffff)),
     jefe: null, boards: [], over: false, pausa: false, uid: 1, banner: { txt: 'Ronda 1', t: 1.8 }, onFin: opts.onFin, aviso: null
   };
+  ponerTablero(opts.tablero);
   M.yo = crearTablero(opts.yo);
   M.boards.push(M.yo);
   if (opts.rival) { M.rival = crearTablero(opts.rival); M.boards.push(M.rival); }
+  precargar();
 }
 
 function nuevaRuna(b, t, r) {
-  const u = { id: M.uid++, t, r, cd: 0.3 + Math.random() * 0.5, age: 0, stun: 0, flash: 0.35, gen: 0 };
+  const u = { id: M.uid++, t, r, cd: 0.3 + Math.random() * 0.5, age: 0, stun: 0, flash: 0.35, gen: 0, atk: 0, pop: 0.3, cara: 1 };
   return u;
 }
 
@@ -59,7 +104,7 @@ function hpBase() { return 55 * Math.pow(1.42, M.ronda - 1) * (1 + 0.6 * Math.mi
 
 function crearMonstruo(b, k, mult) {
   const D = MONSTRUOS[k], hp = hpBase() * D.hp * (mult || 1);
-  const m = { id: M.uid++, k, hp, max: hp, s: 0, spd: D.spd, r: D.r, color: D.color, slow: 0, slowT: 0, stun: 0, psn: [], inv: 0, flash: 0, jefe: null, muro: D.muro, mana: D.mana };
+  const m = { id: M.uid++, k, hp, max: hp, s: 0, spd: D.spd * PATH_LEN / LARGO_BASE, r: D.r, color: D.color, slow: 0, slowT: 0, stun: 0, psn: [], inv: 0, flash: 0, jefe: null, muro: D.muro, mana: D.mana };
   b.mons.push(m);
   return m;
 }
@@ -67,7 +112,7 @@ function crearMonstruo(b, k, mult) {
 function crearJefe(b, id) {
   const hp = 1300 * Math.pow(1.85, M.ronda - 1);
   const J = JEFES[id];
-  b.mons.push({ id: M.uid++, k: 'jefe', hp, max: hp, s: 0, spd: 16, r: 19, color: J.color, slow: 0, slowT: 0, stun: 0, psn: [], inv: 0, flash: 0,
+  b.mons.push({ id: M.uid++, k: 'jefe', hp, max: hp, s: 0, spd: 16 * PATH_LEN / LARGO_BASE, r: 19, color: J.color, slow: 0, slowT: 0, stun: 0, psn: [], inv: 0, flash: 0,
     jefe: id, abT: J.cada, muro: 10, mana: 100 + 20 * M.ronda });
   b.jefeVivo = true;
 }
@@ -144,7 +189,7 @@ function invocar(b) {
   b.cells[i] = nuevaRuna(b, azar(b.deck), 1);
   b.invocadas++;
   const p = cellXY(i);
-  fxAnillo(b, p.x, p.y, RUNAS[b.cells[i].t].color, 10, 34, 0.35);
+  fxSprite(b, 'fx/invocar', p.x, p.y, 54, 0.4);
   if (b === M.yo) sonar('invocar');
   return true;
 }
@@ -157,7 +202,7 @@ function fusionar(b, a, c) {
   b.cells[c] = nuevaRuna(b, azar(b.deck), u.r + 1);
   b.fusiones++;
   const p = cellXY(c);
-  fxAnillo(b, p.x, p.y, '#fff', 6, 40, 0.4);
+  fxSprite(b, 'fx/fusion', p.x, p.y, 64, 0.45);
   if (b === M.yo) sonar('fusion');
   return true;
 }
@@ -188,17 +233,18 @@ function usarHeroe(b) {
     for (const m of b.mons) {
       herir(b, m, m.jefe ? m.max * 0.08 : m.max * 0.5, true);
       const p = pathPos(m.s);
-      fxAnillo(b, p.x, p.y, '#ff6a3d', 4, 26, 0.5);
+      fxSprite(b, 'fx/meteoro', p.x, p.y - 8, 44, 0.6);
     }
   } else if (id === 'tempo') {
     for (const m of b.mons) m.stun = Math.max(m.stun, m.jefe ? 1.5 : 3.5);
-    fxAnillo(b, 176, 120, '#5fd0ff', 20, 220, 0.6);
+    fxSprite(b, 'fx/ventisca', 176, 120, 260, 0.9);
   } else if (id === 'forja') {
     const us = b.cells.map((u, i) => ({ u, i })).filter((o) => o.u && o.u.r < RANGO_MAX).sort((x, y) => x.u.r - y.u.r).slice(0, 2);
-    for (const o of us) { o.u.r++; o.u.flash = 0.5; const p = cellXY(o.i); fxAnillo(b, p.x, p.y, '#ffb534', 6, 36, 0.5); }
+    for (const o of us) { o.u.r++; o.u.flash = 0.5; o.u.pop = 0.4; const p = cellXY(o.i); fxSprite(b, 'fx/torvald-forja', p.x, p.y, 60, 0.6); }
   } else if (id === 'dora') {
     const g = 80 + 30 * M.ronda;
     b.mana += g;
+    fxSprite(b, 'fx/ganancia-mana', 176, 120, 110, 0.9);
     fxTexto(b, 176, 120, '+' + g + ' maná', '#ffd23f', 1.2, 18);
   }
   if (b === M.yo) sonar('heroe');
@@ -244,12 +290,14 @@ function disparar(b, u, i, m) {
   const p = cellXY(i);
   let d = dano(b, u);
   if (u.t === 'verdugo' && m.jefe && m.hp / m.max < 0.3) d *= 2;
-  b.shots.push({ x: p.x, y: p.y, m, d, t: u.t, r: u.r, uid: u.id, col: RUNAS[u.t].color });
-  u.flash = 0.12;
+  b.shots.push({ x: p.x, y: p.y - 10, m, d, t: u.t, r: u.r, uid: u.id, col: RUNAS[u.t].color, giro: 0 });
+  u.atk = 0.25;
+  u.cara = pathPos(m.s).x < p.x ? -1 : 1;
 }
 
 function impactar(b, s, m) {
-  const d = s.d;
+  const d = s.d, R = RUNAS[s.t];
+  if (R.imp) { const p = pathPos(m.s); fxSprite(b, 'fx/' + R.imp, p.x, p.y - 8, s.t === 'dragon' ? 70 : s.t === 'ascua' ? 40 : 26, 0.25); }
   switch (s.t) {
     case 'ascua':
       herir(b, m, d);
@@ -406,6 +454,8 @@ function pasoTablero(b, dt) {
     if (!u) return;
     u.age += dt;
     if (u.flash > 0) u.flash -= dt;
+    if (u.atk > 0) u.atk -= dt;
+    if (u.pop > 0) u.pop = Math.max(0, u.pop - dt * 1.5);
     if (u.stun > 0) { u.stun -= dt; return; }
     const R = RUNAS[u.t];
     if (u.t === 'caliz') {
@@ -426,8 +476,9 @@ function pasoTablero(b, dt) {
       const d = dano(b, u);
       for (const m of b.mons) { herir(b, m, d); if (!m.jefe) m.stun = Math.max(m.stun, 0.35); }
       const p = cellXY(i);
-      fxAnillo(b, p.x, p.y, '#f2a93b', 10, 200, 0.5);
-      u.flash = 0.2;
+      fxSprite(b, 'fx/marea', p.x, p.y - 6, 90, 0.5);
+      for (const m of b.mons) { const q = pathPos(m.s); fxSprite(b, 'fx/hielo-impacto', q.x, q.y - 6, 22, 0.3); }
+      u.atk = 0.4;
       u.cd = intervalo(b, u, i);
       return;
     }
@@ -445,6 +496,8 @@ function pasoTablero(b, dt) {
       s.m = n;
     }
     const q = pathPos(s.m.s), dx = q.x - s.x, dy = q.y - s.y, dist = Math.hypot(dx, dy), v = 560 * dt;
+    s.giro += dt * 12;
+    s.ang = Math.atan2(dy, dx);
     if (dist <= v + 6) { impactar(b, s, s.m); s.fin = true; continue; }
     s.x += dx / dist * v; s.y += dy / dist * v;
   }
@@ -479,7 +532,7 @@ function pasoTablero(b, dt) {
     const g = Math.round(m.mana * (1 + 0.1 * (M.ronda - 1)));
     b.mana += g;
     const p = pathPos(m.s);
-    fxAnillo(b, p.x, p.y, m.color, 3, m.r + 10, 0.3);
+    fxSprite(b, 'fx/muerte-puf', p.x, p.y - 8, m.jefe ? 70 : 32, 0.35);
     if (m.jefe) {
       b.jefeVivo = false;
       fxTexto(b, p.x, p.y - 20, '+' + g, '#7fe0ff', 1.2, 16);
@@ -527,6 +580,7 @@ function pensarIA(b, dt) {
 
 // ---------- Efectos ----------
 function fxAnillo(b, x, y, col, r0, r1, d) { b.fx.push({ k: 'ring', x, y, col, r0, r1, t: d, d }); }
+function fxSprite(b, name, x, y, size, d) { b.fx.push({ k: 'spr', name, x, y, size, t: d, d }); }
 function fxTexto(b, x, y, txt, col, d, size) { b.fx.push({ k: 'txt', x, y, txt, col, t: d, d, size: size || 12 }); }
 
 // ---------- Dibujo ----------
@@ -654,7 +708,8 @@ function dibujarRuna(c, tipo, r, x, y, t, op) {
 }
 
 const iconoCache = {};
-function iconoURL(tipo, r) {
+function iconoURL(tipo) { return 'assets/units/' + RUNAS[tipo].img + '.webp'; }
+function iconoVectorURL(tipo, r) {
   const key = tipo + (r || 0);
   if (iconoCache[key]) return iconoCache[key];
   const cv = document.createElement('canvas');
@@ -673,7 +728,7 @@ function dibujar(c) {
   dibujarFranja(c);
   if (drag && drag.moved) {
     const u = M.yo.cells[drag.from];
-    if (u) { c.globalAlpha = 0.85; dibujarRuna(c, u.t, u.r, drag.x, drag.y, 52); c.globalAlpha = 1; }
+    if (u) { c.globalAlpha = 0.85; dibujarTropa(c, u, drag.x, drag.y); c.globalAlpha = 1; }
   }
   if (M.banner) {
     const a = Math.min(1, M.banner.t * 2);
@@ -736,92 +791,185 @@ function dibujarFranja(c) {
   c.restore();
 }
 
+function dibujarSprite(c, name, x, y, size, alpha, rot) {
+  const im = img(name);
+  if (!listo(im)) return false;
+  const k = size / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
+  c.save();
+  c.globalAlpha *= alpha == null ? 1 : alpha;
+  c.translate(x, y);
+  if (rot) c.rotate(rot);
+  c.drawImage(im, -w / 2, -h / 2, w, h);
+  c.restore();
+  return true;
+}
+
+// Tropa de pie sobre su casilla: x,y es el centro de la casilla en pantalla.
+function dibujarTropa(c, u, x, y, celda) {
+  const R = RUNAS[u.t];
+  const pose = u.atk > 0 && R.vel ? 'attack' : 'idle';
+  let im = img('units/board/' + R.img + '-' + pose);
+  if (!listo(im)) im = img('units/board/' + R.img + '-idle');
+  const ch = Math.min(CH, 56), pies = y + ch * 0.36;
+  c.save();
+  c.fillStyle = COLOR_RANGO[u.r];
+  c.globalAlpha *= 0.35;
+  c.beginPath(); c.ellipse(x, pies - 2, 20, 6, 0, 0, 7); c.fill();
+  c.restore();
+  if (!listo(im)) { dibujarRuna(c, u.t, u.r, x, y, 44, { flash: u.flash, stun: u.stun }); return; }
+  const h = 66 * Math.min(1, 0.55 + CH / 100) * (1 + u.pop * 0.5), k = h / 512, w = im.naturalWidth * k, hh = im.naturalHeight * k;
+  c.save();
+  c.translate(x, pies);
+  if (pose === 'attack' && u.cara < 0) c.scale(-1, 1);
+  const f = [];
+  if (u.stun > 0) f.push('saturate(0.3) brightness(1.2) hue-rotate(160deg)');
+  if (u.flash > 0) f.push('brightness(1.6)');
+  if (f.length) c.filter = f.join(' ');
+  c.drawImage(im, -w / 2, -hh + 4, w, hh);
+  c.restore();
+  if (u.stun > 0) dibujarSprite(c, 'fx/estado-aturdido', x, pies - h * 0.75, 22, 0.95);
+  // rango
+  const bx = x - 21, by = y - (celda ? ch * 0.36 : 20), r = 8;
+  c.fillStyle = 'rgba(10,12,30,0.88)'; c.beginPath(); c.arc(bx, by, r, 0, 7); c.fill();
+  c.lineWidth = 2; c.strokeStyle = COLOR_RANGO[u.r]; c.stroke();
+  c.fillStyle = COLOR_RANGO[u.r]; c.font = '900 11px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(u.r, bx, by + 0.5);
+  if (u.t === 'caliz') {
+    c.strokeStyle = '#7fd6ff'; c.lineWidth = 2.5; c.beginPath();
+    c.arc(x + 21, by, 6, -Math.PI / 2, -Math.PI / 2 + (u.gen / 6) * Math.PI * 2); c.stroke();
+  }
+  if (u.t === 'semilla') { const k2 = Math.min(1, u.age * 0.025); c.fillStyle = '#9bd44a'; c.fillRect(x - 18, pies + 2, 36 * k2, 3); }
+}
+
 function dibujarTablero(c, b) {
   c.save();
   if (b.temblor > 0) c.translate((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
-  // camino
-  c.lineJoin = 'round'; c.lineCap = 'round';
-  c.strokeStyle = b.flip ? '#2a2038' : '#2b2442';
-  c.lineWidth = 32;
-  c.beginPath();
-  PATH.forEach(([x, y], k) => { const [sx, sy] = scr(b, x, y); k ? c.lineTo(sx, sy) : c.moveTo(sx, sy); });
-  c.stroke();
-  c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 2; c.setLineDash([6, 8]);
-  c.stroke(); c.setLineDash([]);
-  // entrada y muro
-  { const [sx, sy] = scr(b, PATH[0][0], PATH[0][1]); c.fillStyle = '#5a2b7a'; c.beginPath(); c.arc(sx, sy, 13, 0, 7); c.fill(); c.fillStyle = '#c58bff'; c.beginPath(); c.arc(sx, sy, 6, 0, 7); c.fill(); }
-  { const [sx, sy] = scr(b, PATH[3][0], PATH[3][1]); const k = b.muro / MURO_MAX; c.fillStyle = k > 0.5 ? '#6f7d96' : k > 0.25 ? '#b08a4a' : '#b0464a'; c.beginPath(); c.roundRect(sx - 16, sy - 8, 32, 16, 4); c.fill(); c.fillStyle = '#fff'; c.font = '800 10px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(b.muro, sx, sy + 1); }
-  // casillas
   const esYo = b === M.yo;
-  const selU = esYo ? (drag ? b.cells[drag.from] : b.cells[b.sel]) : null;
-  for (let i = 0; i < 15; i++) {
-    const p = cellXY(i), [sx, sy] = scr(b, p.x, p.y);
-    c.fillStyle = b.flip ? '#1b1628' : '#1f1a33';
-    c.beginPath(); c.roundRect(sx - 26, sy - 26, 52, 52, 10); c.fill();
-    const u = b.cells[i];
-    if (selU && u && u !== selU && puedeFusionar(selU, u)) {
-      c.strokeStyle = '#ffe14d'; c.lineWidth = 2.5; c.beginPath(); c.roundRect(sx - 27, sy - 27, 54, 54, 11); c.stroke();
+  // fondo: el tablero de Reino, volteado para el rival
+  const bim = GEO ? img('boards/' + GEO.id) : null;
+  if (listo(bim)) {
+    c.save();
+    c.translate(OX, b.flip ? MID_TOP : ME_Y);
+    if (b.flip) c.scale(1, -1);
+    c.beginPath(); c.rect(-OX, 0, W, 252); c.clip();
+    const T = GEO.T, s = GEO.s;
+    c.drawImage(bim, GX - T.g[0] * s, GY - T.g[1] * s, T.iw * s, T.ih * s);
+    if (b.flip) { c.fillStyle = 'rgba(10,6,20,.22)'; c.fillRect(-OX, 0, W, 252); }
+    c.restore();
+  } else {
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    c.strokeStyle = '#2b2442'; c.lineWidth = 30;
+    c.beginPath();
+    PATH.forEach(([x, y], k) => { const [sx, sy] = scr(b, x, y); k ? c.lineTo(sx, sy) : c.moveTo(sx, sy); });
+    c.stroke();
+    for (let i = 0; i < 15; i++) {
+      const p = cellXY(i), [sx, sy] = scr(b, p.x, p.y);
+      c.fillStyle = '#1f1a33'; c.beginPath(); c.roundRect(sx - CW / 2, sy - CH / 2 + 2, CW, CH - 4, 10); c.fill();
     }
-    if (!u || (drag && drag.moved && esYo && drag.from === i)) continue;
-    if (u.t === 'yunque' || u.t === 'reloj') {
-      c.fillStyle = u.t === 'yunque' ? 'rgba(192,138,90,.12)' : 'rgba(201,166,255,.1)';
-      c.beginPath(); c.arc(sx, sy, u.t === 'yunque' ? 44 : 34, 0, 7); c.fill();
-    }
-    dibujarRuna(c, u.t, u.r, sx, sy, 48, { flash: u.flash, stun: u.stun });
-    if (esYo && b.sel === i) { c.strokeStyle = '#fff'; c.lineWidth = 2.5; c.beginPath(); c.roundRect(sx - 27, sy - 27, 54, 54, 11); c.stroke(); }
-    if (u.t === 'semilla') { const k = Math.min(1, u.age * 0.025); c.fillStyle = '#9bd44a'; c.fillRect(sx - 20, sy + 20, 40 * k, 3); }
   }
+  // muralla al final del camino
+  {
+    const e = PATH[PATH.length - 1], [sx, sy] = scr(b, e[0], e[1]), k = b.muro / MURO_MAX;
+    c.fillStyle = k > 0.5 ? 'rgba(60,70,95,.9)' : k > 0.25 ? 'rgba(150,110,50,.9)' : 'rgba(170,60,70,.95)';
+    c.beginPath(); c.roundRect(sx - 15, sy - 9, 30, 18, 6); c.fill();
+    c.fillStyle = '#fff'; c.font = '900 11px Nunito, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(b.muro, sx, sy + 1);
+  }
+  // casillas resaltadas
+  const selI = esYo ? (drag ? drag.from : b.sel) : -1, selU = selI >= 0 ? b.cells[selI] : null;
+  if (selU) for (let i = 0; i < 15; i++) {
+    const p = cellXY(i), [sx, sy] = scr(b, p.x, p.y), u = b.cells[i];
+    let col = null;
+    if (i === selI) col = 'rgba(255,255,255,.3)';
+    else if (u && puedeFusionar(selU, u)) col = 'rgba(255,214,74,.45)';
+    else if (!u) col = 'rgba(120,200,255,.12)';
+    if (col) { c.fillStyle = col; c.beginPath(); c.roundRect(sx - CW / 2 + 1, sy - CH / 2 + 3, CW - 2, CH - 6, 9); c.fill(); }
+  }
+  // auras de apoyo
+  b.cells.forEach((u, i) => {
+    if (!u || (u.t !== 'yunque' && u.t !== 'reloj')) return;
+    const p = cellXY(i), [sx, sy] = scr(b, p.x, p.y);
+    c.fillStyle = u.t === 'yunque' ? 'rgba(255,190,110,.13)' : 'rgba(201,166,255,.12)';
+    c.beginPath(); c.ellipse(sx, sy, u.t === 'yunque' ? 70 : 40, u.t === 'yunque' ? CH * 1.25 : 30, 0, 0, 7); c.fill();
+  });
   // monstruos
   for (const m of b.mons) {
     const p = pathPos(m.s), [sx, sy] = scr(b, p.x, p.y);
+    const D = m.jefe ? null : MONSTRUOS[m.k];
+    const im = img('enemies/' + (m.jefe ? JEFES[m.jefe].img : D.img));
+    const tam = m.jefe ? 58 : D.tam;
+    c.save();
     c.globalAlpha = m.inv > 0 ? 0.4 : 1;
-    if (m.k === 'emisario' || m.k === 'enviado') {
-      c.fillStyle = m.flash > 0 ? '#fff' : m.color;
-      c.beginPath(); c.moveTo(sx, sy - m.r - 2); c.lineTo(sx + m.r + 1, sy); c.lineTo(sx, sy + m.r + 2); c.lineTo(sx - m.r - 1, sy); c.closePath(); c.fill();
-      c.strokeStyle = '#f0d6ff'; c.lineWidth = 1.5; c.stroke();
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(sx, sy + 5, tam * 0.35, tam * 0.1, 0, 0, 7); c.fill();
+    if (D && D.aura) { c.fillStyle = D.aura + '55'; c.beginPath(); c.arc(sx, sy - tam * 0.4, tam * 0.62, 0, 7); c.fill(); }
+    if (listo(im)) {
+      const k = tam / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
+      const bob = Math.sin(M.t * 8 + m.id) * tam * 0.03;
+      c.translate(sx, sy + 6 + bob);
+      if (p.dx < -0.01) c.scale(-1, 1);
+      const f = [];
+      if (m.flash > 0) f.push('brightness(1.8)');
+      if (m.slowT > 0 || m.stun > 0) f.push('hue-rotate(170deg) saturate(0.7)');
+      if (m.psn.length) f.push('sepia(0.3) hue-rotate(60deg)');
+      if (m.jefe === 'sombra') f.push('brightness(0.55) saturate(1.4)');
+      if (f.length) c.filter = f.join(' ');
+      c.drawImage(im, -w / 2, -h, w, h);
     } else {
-      c.fillStyle = m.flash > 0 ? '#fff' : m.color;
-      c.beginPath(); c.arc(sx, sy, m.r, 0, 7); c.fill();
-      if (m.jefe) {
-        c.fillStyle = '#ffd23f';
-        c.beginPath(); c.moveTo(sx - 12, sy - 14); c.lineTo(sx - 8, sy - 26); c.lineTo(sx - 3, sy - 17); c.lineTo(sx, sy - 28); c.lineTo(sx + 3, sy - 17); c.lineTo(sx + 8, sy - 26); c.lineTo(sx + 12, sy - 14); c.closePath(); c.fill();
-      }
+      c.fillStyle = m.color; c.beginPath(); c.arc(sx, sy, m.r, 0, 7); c.fill();
     }
-    c.fillStyle = '#1a1020';
-    const e = m.r * 0.35;
-    c.beginPath(); c.arc(sx - e, sy - e * 0.4, Math.max(1.5, m.r * 0.14), 0, 7); c.arc(sx + e, sy - e * 0.4, Math.max(1.5, m.r * 0.14), 0, 7); c.fill();
-    if (m.slowT > 0) { c.strokeStyle = '#7fe0ff'; c.lineWidth = 2; c.beginPath(); c.arc(sx, sy, m.r + 3, 0, 7); c.stroke(); }
-    if (m.psn.length) { c.fillStyle = 'rgba(123,227,107,.35)'; c.beginPath(); c.arc(sx, sy, m.r, 0, 7); c.fill(); }
-    if (m.stun > 0) { c.fillStyle = '#ffe14d'; c.font = '800 9px Nunito, sans-serif'; c.textAlign = 'center'; c.fillText('✦', sx, sy - m.r - 6); }
+    c.restore();
+    const top = sy + 6 - tam;
+    const st = [];
+    if (m.stun > 0) st.push('estado-aturdido');
+    if (m.slowT > 0 && m.slow > 0.25) st.push('estado-helado');
+    if (m.psn.length) st.push('estado-veneno');
+    st.forEach((n, k) => dibujarSprite(c, 'fx/' + n, sx + (k - (st.length - 1) / 2) * 12, top - 10, 12, 0.95));
     if (!m.jefe && m.hp < m.max) {
-      const bw = m.r * 2 + 4;
-      c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(sx - bw / 2, sy - m.r - 6, bw, 3);
-      c.fillStyle = '#ff4d6a'; c.fillRect(sx - bw / 2, sy - m.r - 6, bw * Math.max(0, m.hp / m.max), 3);
+      const bw = tam * 0.8;
+      c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(sx - bw / 2, top - 3, bw, 4);
+      c.fillStyle = D.aura ? '#d6a6ff' : '#ff4d6a'; c.fillRect(sx - bw / 2, top - 3, bw * Math.max(0, m.hp / m.max), 4);
     }
-    c.globalAlpha = 1;
+  }
+  // tropas: de arriba abajo en pantalla para que las de delante tapen a las de detrás
+  const orden = [];
+  b.cells.forEach((u, i) => { if (u && !(esYo && drag && drag.moved && drag.from === i)) orden.push(i); });
+  orden.sort((x, y) => scr(b, 0, cellXY(x).y)[1] - scr(b, 0, cellXY(y).y)[1]);
+  for (const i of orden) { const p = cellXY(i), [sx, sy] = scr(b, p.x, p.y); dibujarTropa(c, b.cells[i], sx, sy, true); }
+  if (esYo && b.sel >= 0 && b.cells[b.sel]) {
+    const p = cellXY(b.sel), [sx, sy] = scr(b, p.x, p.y);
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.roundRect(sx - CW / 2, sy - CH / 2 + 2, CW, CH - 4, 10); c.stroke();
   }
   // proyectiles
   for (const s of b.shots) {
-    const [sx, sy] = scr(b, s.x, s.y);
-    c.fillStyle = s.col;
-    c.beginPath(); c.arc(sx, sy, s.t === 'dragon' || s.t === 'lanza' ? 4.5 : 3.2, 0, 7); c.fill();
+    const [sx, sy] = scr(b, s.x, s.y), R = RUNAS[s.t];
+    const ang = b.flip ? -(s.ang || 0) : (s.ang || 0);
+    if (!R.tiro || !dibujarSprite(c, 'fx/' + R.tiro, sx, sy, s.t === 'dragon' || s.t === 'semilla' ? 26 : 18, 1, R.gira ? s.giro : ang)) {
+      c.fillStyle = s.col; c.beginPath(); c.arc(sx, sy, 3.2, 0, 7); c.fill();
+    }
   }
   // efectos
   for (const f of b.fx) {
     const k = 1 - f.t / f.d;
     c.globalAlpha = Math.max(0, f.t / f.d);
-    if (f.k === 'ring') {
+    if (f.k === 'spr') {
+      const [sx, sy] = scr(b, f.x, f.y);
+      c.globalAlpha = 1 - k * k;
+      dibujarSprite(c, f.name, sx, sy, f.size * (0.8 + 0.3 * k));
+    } else if (f.k === 'ring') {
       const [sx, sy] = scr(b, f.x, f.y);
       c.strokeStyle = f.col; c.lineWidth = 2.5;
       c.beginPath(); c.arc(sx, sy, f.r0 + (f.r1 - f.r0) * k, 0, 7); c.stroke();
     } else if (f.k === 'txt') {
       const [sx, sy] = scr(b, f.x, f.y);
-      c.fillStyle = f.col; c.font = `900 ${f.size}px Nunito, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(f.txt, sx, sy - k * 14);
+      c.font = `900 ${f.size}px Nunito, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(f.txt, sx, sy - k * 14);
+      c.fillStyle = f.col; c.fillText(f.txt, sx, sy - k * 14);
     } else if (f.k === 'line') {
       const [ax, ay] = scr(b, f.a.x, f.a.y), [bx, by] = scr(b, f.b.x, f.b.y);
-      c.strokeStyle = f.col; c.lineWidth = 2;
-      c.beginPath(); c.moveTo(ax, ay); c.lineTo((ax + bx) / 2 + (Math.random() - 0.5) * 10, (ay + by) / 2 + (Math.random() - 0.5) * 10); c.lineTo(bx, by); c.stroke();
+      c.lineCap = 'round';
+      for (const [col, lw] of [[f.col, 5], ['#fff', 1.6]]) {
+        c.strokeStyle = col; c.lineWidth = lw;
+        c.beginPath(); c.moveTo(ax, ay); c.lineTo((ax + bx) / 2 + (Math.random() - 0.5) * 10, (ay + by) / 2 + (Math.random() - 0.5) * 10); c.lineTo(bx, by); c.stroke();
+      }
     }
     c.globalAlpha = 1;
   }
@@ -836,7 +984,7 @@ function puntoLogico(cv, e) {
 }
 function celdaEn(p) {
   const lx = p.x - OX, ly = p.y - ME_Y;
-  const c = Math.floor((lx - GX) / CELL), r = Math.floor((ly - GY) / CELL);
+  const c = Math.floor((lx - GX) / CW), r = Math.floor((ly - GY) / CH);
   if (c < 0 || c > 4 || r < 0 || r > 2) return -1;
   return r * 5 + c;
 }

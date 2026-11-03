@@ -42,8 +42,10 @@ function cerrarModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; 
 
 function heroeAvatar(id, size) {
   const H = HEROES[id];
-  return `<span class="avatar" style="--c:${H.color};width:${size}px;height:${size}px;font-size:${size * 0.5}px">${H.nombre[0]}</span>`;
+  return `<span class="avatar" style="--c:${H.color};width:${size}px;height:${size}px"><img src="assets/commanders/${H.img}.webp" alt="${H.nombre}"></span>`;
 }
+const ICO_ORO = '<img class="ico" src="assets/icons/moneda.webp" alt="oro">';
+const ICO_COPA = '<img class="ico" src="assets/icons/corona.webp" alt="copas">';
 
 // ---------- Inicio ----------
 function pantallaInicio() {
@@ -56,7 +58,7 @@ function pantallaInicio() {
   menu.innerHTML = `
     <header class="top">
       <h1 class="logo">Duelo<br><span>de Runas</span></h1>
-      <div class="recursos"><span>🏆 ${S.copas}</span><span>🪙 ${S.oro}</span></div>
+      <div class="recursos"><span>${ICO_COPA} ${S.copas}</span><span>${ICO_ORO} ${S.oro}</span></div>
     </header>
     <section class="arena" style="--c:${A.color}">
       <small>Arena ${ai + 1}</small>
@@ -93,10 +95,10 @@ function pantallaInicio() {
 function guia() {
   modal(`<h2>Cómo se juega</h2>
     <ul class="guia">
-      <li><b>Invocar</b> pone una runa al azar de tu mazo en una casilla libre. Cada invocación cuesta 10 de maná más que la anterior.</li>
-      <li><b>Fusionar</b>: arrastra una runa sobre otra igual con los mismos puntos. Sale una runa al azar de tu mazo con un punto más. Máximo 7.</li>
-      <li>Arrastrar a una casilla vacía o sobre otra runa las cambia de sitio. También puedes tocar una y luego otra.</li>
-      <li><b>Cartas de abajo</b>: mejoran esa runa para toda la partida, hasta nivel 5.</li>
+      <li><b>Invocar</b> pone una tropa al azar de tu mazo en una casilla libre. Cada invocación cuesta 10 de maná más que la anterior.</li>
+      <li><b>Fusionar</b>: arrastra una tropa sobre otra igual del mismo rango. Sale una tropa al azar de tu mazo con un rango más. Máximo 7.</li>
+      <li>Arrastrar a una casilla vacía o sobre otra tropa las cambia de sitio. También puedes tocar una y luego otra.</li>
+      <li><b>Cartas de abajo</b>: mejoran esa tropa para toda la partida, hasta nivel 5.</li>
       <li>Los monstruos dan maná al caer. Cada 40 segundos llega un <b>jefe</b> a los dos tableros.</li>
       <li>Si matas un <b>Emisario</b> morado, le llega un Enviado a tu rival. Y al revés.</li>
       <li>Cada monstruo que cruza resta a tu <b>muralla</b>. Gana quien aguante más.</li>
@@ -120,13 +122,13 @@ function pantallaMazo() {
     return (!!S.cartas[b] - !!S.cartas[a]) || ra - rb;
   });
   menu.innerHTML = `
-    <header class="top"><button class="volver" id="v-volver">Volver</button><div class="recursos"><span>🏆 ${S.copas}</span><span>🪙 ${S.oro}</span></div></header>
+    <header class="top"><button class="volver" id="v-volver">Volver</button><div class="recursos"><span>${ICO_COPA} ${S.copas}</span><span>${ICO_ORO} ${S.oro}</span></div></header>
     <h2 class="titulo">Tu mazo</h2>
     <section class="mazo-slots">${S.mazo.map((t) => `<button class="carta" data-id="${t}">${cartaHTML(t)}</button>`).join('')}</section>
     <h2 class="titulo">Héroe</h2>
     <section class="heroes">${HEROE_IDS.map((id) => {
       const H = HEROES[id], libre = heroeLibre(id);
-      return `<button class="heroe ${S.heroe === id ? 'activo' : ''}" data-h="${id}" ${libre ? '' : 'disabled'}>${heroeAvatar(id, 40)}<b>${H.nombre}</b><small>${libre ? H.hab : '🏆 ' + H.copas}</small></button>`;
+      return `<button class="heroe ${S.heroe === id ? 'activo' : ''}" data-h="${id}" ${libre ? '' : 'disabled'}>${heroeAvatar(id, 40)}<b>${H.nombre}</b><small>${libre ? H.hab : ICO_COPA + ' ' + H.copas}</small></button>`;
     }).join('')}</section>
     <h2 class="titulo">Colección</h2>
     <section class="coleccion">${orden.map((t) => S.cartas[t]
@@ -148,7 +150,7 @@ function cartaHTML(t) {
   const c = S.cartas[t], i = c.lv - 1, max = c.lv >= NIVEL_MAX;
   const need = max ? 1 : NIVEL_COPIAS[i], k = max ? 1 : Math.min(1, c.n / need);
   const lista = !max && c.n >= need;
-  return `<img src="${iconoURL(t)}" alt=""><b>${RUNAS[t].nombre}</b><small class="nv">Nv ${c.lv}</small>
+  return `<img src="${iconoURL(t)}" alt=""><b style="color:${RAREZAS[RUNAS[t].rareza].color}">${RUNAS[t].nombre}</b><small class="nv">Nv ${c.lv}</small>
     <span class="copias ${lista ? 'lista' : ''}"><i style="width:${k * 100}%"></i><em>${max ? 'Máx' : c.n + '/' + need}</em></span>`;
 }
 
@@ -165,9 +167,9 @@ function detalleCarta(t) {
   const base = R.dmg ? `<p class="stats">Daño base ${Math.round(R.dmg * (1 + 0.1 * (c.lv - 1)))} · cada ${R.vel.toString().replace('.', ',')} s</p>` : '';
   modal(`<img class="grande" src="${iconoURL(t)}" alt=""><h2>${R.nombre}</h2><p class="rareza" style="color:${Rz.color}">${Rz.nombre} · Nivel ${c.lv}</p>
     <p>${R.desc}</p>${base}
-    <p class="nota">${max ? 'Nivel máximo.' : `Siguiente nivel: ${c.n}/${need} copias y ${oro} 🪙. Cada nivel suma un 10 % de daño.`}</p>
+    <p class="nota">${max ? 'Nivel máximo.' : `Siguiente nivel: ${c.n}/${need} copias y ${oro} ${ICO_ORO}. Cada nivel suma un 10 % de daño.`}</p>
     <div class="fila-btn">
-      ${max ? '' : `<button class="btn ${puede ? 'oro' : ''}" id="c-subir" ${puede ? '' : 'disabled'}>Subir ${oro} 🪙</button>`}
+      ${max ? '' : `<button class="btn ${puede ? 'oro' : ''}" id="c-subir" ${puede ? '' : 'disabled'}>Subir ${oro} ${ICO_ORO}</button>`}
       ${enMazo ? '' : '<button class="btn" id="c-mazo">Al mazo</button>'}
       <button class="btn gris" onclick="cerrarModal()">Cerrar</button>
     </div>
@@ -209,7 +211,7 @@ function abrirCofre(tipo, despues) {
   sonar('cofre');
   const lista = Object.keys(r.cartas).sort((a, b) => r.cartas[b] - r.cartas[a]);
   modal(`<div class="cofre" style="--c:${C.color}"></div><h2>${C.nombre}</h2>
-    <p class="oro-gana">+${r.oro} 🪙</p>
+    <p class="oro-gana">+${r.oro} ${ICO_ORO}</p>
     <div class="premios">${lista.map((id) => `<div class="premio">${nuevas.includes(id) ? '<em>Nueva</em>' : ''}<img src="${iconoURL(id)}" alt=""><b>×${r.cartas[id]}</b><small>${RUNAS[id].nombre}</small></div>`).join('')}</div>
     <button class="btn" id="cf-ok">Seguir</button>`);
   $('#cf-ok').onclick = () => { cerrarModal(); despues && despues(); };
@@ -238,19 +240,19 @@ function crearRival() {
 function buscarRival() {
   const rival = crearRival();
   modal(`<p class="nota">Buscando rival…</p><div class="vs">
-      <div>${heroeAvatar(S.heroe, 54)}<b>Tú</b><small>🏆 ${S.copas}</small><div class="mini">${S.mazo.map((t) => `<img src="${iconoURL(t)}" alt="">`).join('')}</div></div>
+      <div>${heroeAvatar(S.heroe, 54)}<b>Tú</b><small>${ICO_COPA} ${S.copas}</small><div class="mini">${S.mazo.map((t) => `<img src="${iconoURL(t)}" alt="">`).join('')}</div></div>
       <span>VS</span>
-      <div>${heroeAvatar(rival.hero, 54)}<b>${rival.nombre}</b><small>🏆 ${rival.copas}</small><div class="mini">${rival.deck.map((t) => `<img src="${iconoURL(t)}" alt="">`).join('')}</div></div>
+      <div>${heroeAvatar(rival.hero, 54)}<b>${rival.nombre}</b><small>${ICO_COPA} ${rival.copas}</small><div class="mini">${rival.deck.map((t) => `<img src="${iconoURL(t)}" alt="">`).join('')}</div></div>
     </div>`);
   setTimeout(() => {
     cerrarModal();
-    empezarPartida({ modo: 'duelo', yo: { side: 'me', nombre: 'Tú', copas: S.copas, deck: S.mazo, lv: lvMapa(), hero: S.heroe }, rival, onFin: finDuelo });
+    empezarPartida({ modo: 'duelo', tablero: ARENAS[arenaIdx()].tablero, yo: { side: 'me', nombre: 'Tú', copas: S.copas, deck: S.mazo, lv: lvMapa(), hero: S.heroe }, rival, onFin: finDuelo });
     abrirJuego();
   }, 1800);
 }
 
 function empezarSuper() {
-  empezarPartida({ modo: 'super', yo: { side: 'me', nombre: 'Tú', deck: S.mazo, lv: lvMapa(), hero: S.heroe }, rival: null, onFin: finSuper });
+  empezarPartida({ modo: 'super', tablero: ARENAS[arenaIdx()].tablero, yo: { side: 'me', nombre: 'Tú', deck: S.mazo, lv: lvMapa(), hero: S.heroe }, rival: null, onFin: finSuper });
   M.record = S.record;
   abrirJuego();
 }
@@ -271,7 +273,7 @@ function finDuelo(res) {
   const titulo = { victoria: '¡Victoria!', derrota: 'Derrota', empate: 'Empate' }[res];
   modal(`<h2 class="res ${res}">${titulo}</h2>
     <p>Ronda ${M.ronda} · muralla ${M.yo.muro} contra ${M.rival.muro}</p>
-    <p class="cambio">${dc >= 0 ? '+' : ''}${dc} 🏆 · +${oro} 🪙</p>
+    <p class="cambio">${dc >= 0 ? '+' : ''}${dc} ${ICO_COPA} · +${oro} ${ICO_ORO}</p>
     ${despues > antes ? `<p class="nota">Nueva arena: <b>${ARENAS[despues].nombre}</b>. Salen cartas nuevas en los cofres.</p>` : ''}
     ${heroesNuevos.map((id) => `<p class="nota">Héroe desbloqueado: <b>${HEROES[id].nombre}</b></p>`).join('')}
     <div class="stats-fin"><span>Invocadas ${M.yo.invocadas}</span><span>Fusiones ${M.yo.fusiones}</span><span>Caídos ${M.yo.kills}</span></div>
@@ -286,7 +288,7 @@ function finSuper() {
   if (nuevo) S.record = ronda;
   guardar();
   modal(`<h2 class="res fin">Fin</h2><p>Has llegado a la ronda ${ronda}${nuevo ? ', ¡nuevo récord!' : '.'}</p>
-    <p class="cambio">+${oro} 🪙</p>
+    <p class="cambio">+${oro} ${ICO_ORO}</p>
     <div class="stats-fin"><span>Invocadas ${M.yo.invocadas}</span><span>Fusiones ${M.yo.fusiones}</span><span>Caídos ${M.yo.kills}</span></div>
     <button class="btn ${ronda >= 5 ? 'oro' : ''}" id="f-ok">${ronda >= 5 ? 'Abrir cofre' : 'Seguir'}</button>`);
   $('#f-ok').onclick = () => {
@@ -320,7 +322,7 @@ function abrirJuego() {
   poner('#g-rival', 'hid', !r);
   if (r) {
     poner('#r-nombre', 'text', r.nombre);
-    poner('#r-copas', 'text', '🏆 ' + r.copas);
+    poner('#r-copas', 'html', ICO_COPA + ' ' + r.copas);
     $('#r-heroe').innerHTML = heroeAvatar(r.hero.id, 30);
   }
   $('#b-heroe').innerHTML = `${heroeAvatar(M.yo.hero.id, 44)}<small>${HEROES[M.yo.hero.id].hab}</small>`;
@@ -376,10 +378,10 @@ function hud() {
     poner('#mc-c' + i, 'text', lvl >= 5 ? 'Máx' : MEJORA_COSTE[lvl - 1]);
     poner(`.m-carta[data-i="${i}"]`, 'dis', lvl >= 5 || b.mana < MEJORA_COSTE[lvl - 1]);
   });
-  let info = 'Arrastra una runa sobre otra igual para fusionarlas';
+  let info = 'Arrastra una tropa sobre otra igual para fusionarlas';
   if (b.sel >= 0 && b.cells[b.sel]) {
     const u = b.cells[b.sel];
-    info = `<b>${RUNAS[u.t].nombre}</b> · ${u.r} ${u.r === 1 ? 'punto' : 'puntos'} · ${infoRuna(b, u, b.sel)}`;
+    info = `<b>${RUNAS[u.t].nombre}</b> · rango ${u.r} · ${infoRuna(b, u, b.sel)}`;
   } else if (b.invocadas > 3) info = '';
   poner('#g-info', 'html', info);
 }
